@@ -1,0 +1,481 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN ..\OBJ\main.obj
+COMPILER INVOKED BY: F:\Program Files (x86)\MDK\C51\BIN\C51.EXE main.c LARGE OPTIMIZE(8,SPEED) BROWSE INCDIR(..\SYSTEM;.
+                    -.\HARDWARE) DEBUG OBJECTEXTEND PRINT(.\Listings\main.lst) OBJECT(..\OBJ\main.obj)
+
+line level    source
+
+   1          /*---------------------------------------------------------------------*/
+   2          /* --- STC MCU Limited ------------------------------------------------*/
+   3          /* --- STC 1T Series MCU Demo Programme -------------------------------*/
+   4          /* --- Mobile: (86)13922805190 ----------------------------------------*/
+   5          /* --- Fax: 86-0513-55012956,55012947,55012969 ------------------------*/
+   6          /* --- Tel: 86-0513-55012928,55012929,55012966 ------------------------*/
+   7          /* --- Web: www.STCMCU.com --------------------------------------------*/
+   8          /* --- Web: www.STCMCUDATA.com  ---------------------------------------*/
+   9          /* --- QQ:  800003751 -------------------------------------------------*/
+  10          /* 如果要在程序中使用此代码,请在程序中注明使用了STC的资料及程序            */
+  11          /*---------------------------------------------------------------------*/
+  12          
+  13          #include "config.h"
+  14          #include "GPIO.h"
+  15          #include "delay.h"
+  16          #include "I2C.h"
+  17          #include "LCD1602.h"
+  18          #include "SHT30.h"
+  19          #include "UART.h"
+  20          
+  21          #include "protocol.h"
+  22          #include "mcu_api.h"
+  23          #include "system.h"
+  24          #include "wifi.h"
+  25          
+  26          
+  27          /***************        功能说明        ****************
+  28          
+  29          Yang：用于涂鸦物联网的温湿度控制器。
+  30          
+  31          本例程基于STC8H8K64U为主控芯片的实验箱8进行编写测试，STC8G、STC8H系列芯片可通用参考.
+  32          
+  33          程序使用P6口来演示跑马灯，输出低驱动。
+  34          
+  35          下载时, 选择时钟 24MHz (可以在配置文件"config.h"中修改).
+  36          
+  37          ******************************************/
+  38          
+  39          /*************  本地常量声明    **************/
+  40          #define Beep    P12             //蜂鸣器
+  41          #define LED_B   P16             //WiFi指示灯，WHITE
+  42          #define LED_R   P17             //电源指示灯，RED
+  43          #define S1              P13             //继电器开关S1
+  44          #define S2              P54             //继电器开关S2
+  45          #define KEY_1   P34             //按键KEY_1
+  46          #define KEY_2   P35             //按键KEY_2
+  47          #define KEY_3   P36             //按键KEY_3
+  48          #define KEY_4   P37             //按键KEY_4
+  49          
+  50          u8 table1[]     = "TuYa & LCEDA    ";  //16
+  51          u8 table2[]     = "Humiture Control";  //16
+  52          u8 Table_K1[]   = "K1:";
+  53          u8 Table_K2[]   = "K2:";
+  54          u8 Table_ON[]   = "-";
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 2   
+
+  55          u8 Table_OFF[]  = "x";
+  56          
+  57          /*************  本地变量声明    **************/
+  58          //u8 ledIndex;
+  59          u16 Set_Temp_Open = 250;        //设定温度值
+  60          u16 Set_Temp_Close = 250;       //设定温度值
+  61          u16 Set_Hum = 250;                      //设定湿度值
+  62          u8 Key_Model=0;                         //按键模式
+  63          
+  64          bit Set_Handle_Flag=0;
+  65          bit Wifi_Reset_Flag=0;          //复位wifi成功标志
+  66          
+  67          u8 Temperatur[6];               //温度数据转换字符串缓存
+  68          u8 Humidity[6];                 //湿度数据转换字符串缓存
+  69          u8 Set_Value[5];                //int数据转换字符串缓存
+  70          
+  71          /*************  本地函数声明    **************/
+  72          void Handle_Char_Temp(u16 dat);                 //温度数据转换字符串函数
+  73          void Handle_Char_Hum(u16 dat);                  //湿度数据转换字符串函数
+  74          void Handle_Char_SetTemp(u16 dat);              //int数据转换字符串函数
+  75          void LCD_Display();                                             //LCD1602显示函数
+  76          void Key_Handle();                                              //按键处理函数
+  77          void Set_Handle();                                              //温度设置处理函数
+  78          
+  79          /*************  外部函数和变量声明 *****************/
+  80          
+  81          
+  82          /******************** IO配置函数 **************************/
+  83          void    GPIO_config(void)
+  84          {
+  85   1              GPIO_InitTypeDef        GPIO_InitStructure;             //结构定义
+  86   1              
+  87   1              GPIO_InitStructure.Pin  = GPIO_Pin_0;           //指定要初始化的IO, GPIO_Pin_0 ~ GPIO_Pin_7
+  88   1              GPIO_InitStructure.Mode = GPIO_PullUp;          //指定IO的输入或输出方式,GPIO_PullUp,GPIO_HighZ,GPIO_OUT_OD,GPIO_
+             -OUT_PP
+  89   1              GPIO_Inilize(GPIO_P0,&GPIO_InitStructure);      //初始化
+  90   1      
+  91   1              GPIO_InitStructure.Pin  = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_4 | GPIO_Pin_5;            //指定要初始化的IO, GPIO_Pi
+             -n_0 ~ GPIO_Pin_7
+  92   1              GPIO_InitStructure.Mode = GPIO_PullUp;          //指定IO的输入或输出方式,GPIO_PullUp,GPIO_HighZ,GPIO_OUT_OD,GPIO_
+             -OUT_PP
+  93   1              GPIO_Inilize(GPIO_P1,&GPIO_InitStructure);      //初始化
+  94   1              
+  95   1              GPIO_InitStructure.Pin  = GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_6 | GPIO_Pin_7;            //指定要初始化的IO, GPIO_Pi
+             -n_0 ~ GPIO_Pin_7
+  96   1              GPIO_InitStructure.Mode = GPIO_OUT_PP;          //指定IO的输入或输出方式,GPIO_PullUp,GPIO_HighZ,GPIO_OUT_OD,GPIO_
+             -OUT_PP
+  97   1              GPIO_Inilize(GPIO_P1,&GPIO_InitStructure);      //初始化
+  98   1              Beep = 0;LED_B = 0;LED_R = 0;S1 = 0;
+  99   1              
+ 100   1              GPIO_InitStructure.Pin  = GPIO_Pin_4 | GPIO_Pin_5 | GPIO_Pin_6 | GPIO_Pin_7;            //指定要初始化的IO, GPIO_Pi
+             -n_0 ~ GPIO_Pin_7
+ 101   1              GPIO_InitStructure.Mode = GPIO_PullUp;          //指定IO的输入或输出方式,GPIO_PullUp,GPIO_HighZ,GPIO_OUT_OD,GPIO_
+             -OUT_PP
+ 102   1              GPIO_Inilize(GPIO_P3,&GPIO_InitStructure);      //初始化
+ 103   1              
+ 104   1              GPIO_InitStructure.Pin  = GPIO_Pin_0 | GPIO_Pin_1;              //指定要初始化的IO, GPIO_Pin_0 ~ GPIO_Pin_7
+ 105   1              GPIO_InitStructure.Mode = GPIO_PullUp;  //指定IO的输入或输出方式,GPIO_PullUp,GPIO_HighZ,GPIO_OUT_OD,GPIO_O
+             -UT_PP
+ 106   1              GPIO_Inilize(GPIO_P3,&GPIO_InitStructure);      //初始化
+ 107   1              
+ 108   1              GPIO_InitStructure.Pin  = GPIO_Pin_4;           //指定要初始化的IO, GPIO_Pin_0 ~ GPIO_Pin_7
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 3   
+
+ 109   1              GPIO_InitStructure.Mode = GPIO_OUT_PP;          //指定IO的输入或输出方式,GPIO_PullUp,GPIO_HighZ,GPIO_OUT_OD,GPIO_
+             -OUT_PP
+ 110   1              GPIO_Inilize(GPIO_P5,&GPIO_InitStructure);      //初始化
+ 111   1              S2 = 0;
+ 112   1      }
+ 113          
+ 114          /****************  I2C初始化函数 *****************/
+ 115          void    I2C_config(void)
+ 116          {
+ 117   1              I2C_InitTypeDef         I2C_InitStructure;
+ 118   1              I2C_InitStructure.I2C_Mode      = I2C_Mode_Master;      //主从选择   I2C_Mode_Master, I2C_Mode_Slave
+ 119   1              I2C_InitStructure.I2C_Enable    = ENABLE;                       //I2C功能使能,   ENABLE, DISABLE
+ 120   1              I2C_InitStructure.I2C_MS_WDTA   = DISABLE;                      //主机使能自动发送,  ENABLE, DISABLE
+ 121   1              I2C_InitStructure.I2C_MS_Interrupt = DISABLE;           //使能主机模式中断,  ENABLE, DISABLE
+ 122   1              I2C_InitStructure.I2C_Speed     = 16;                           //总线速度=Fosc/2/(Speed*2+4),      0~63
+ 123   1              I2C_InitStructure.I2C_IoUse     = I2C_P14_P15;          //IO口切换   I2C_P14_P15, I2C_P24_P25, I2C_P33_P32
+ 124   1      
+ 125   1              I2C_Init(&I2C_InitStructure);
+ 126   1      }
+ 127          
+ 128          /***************  串口初始化函数 *****************/
+ 129          void    UART_config(void)
+ 130          {
+ 131   1              COMx_InitDefine         COMx_InitStructure;                                     //结构定义
+ 132   1              COMx_InitStructure.UART_Mode      = UART_8bit_BRTx;             //模式, UART_ShiftRight,UART_8bit_BRTx,UART_9bit,UAR
+             -T_9bit_BRTx
+ 133   1              COMx_InitStructure.UART_BRT_Use   = BRT_Timer2;                 //使用波特率, BRT_Timer1, BRT_Timer2 (注意: 串口2固定使
+             -用BRT_Timer2)
+ 134   1              COMx_InitStructure.UART_BaudRate  = 115200ul;                   //波特率, 一般 110 ~ 115200
+ 135   1              COMx_InitStructure.UART_RxEnable  = ENABLE;                             //接收允许,   ENABLE或DISABLE
+ 136   1              COMx_InitStructure.BaudRateDouble = DISABLE;                    //波特率加倍, ENABLE或DISABLE
+ 137   1              COMx_InitStructure.UART_Interrupt = ENABLE;                             //中断允许,   ENABLE或DISABLE
+ 138   1              COMx_InitStructure.UART_Polity    = Polity_0;                   //指定中断优先级(低到高) Polity_0,Polity_1,Polity_2,Polit
+             -y_3
+ 139   1              COMx_InitStructure.UART_P_SW      = UART1_SW_P30_P31;   //切换端口,   UART1_SW_P30_P31,UART1_SW_P36_P37,UAR
+             -T1_SW_P16_P17,UART1_SW_P43_P44
+ 140   1              UART_Configuration(UART1, &COMx_InitStructure);                 //初始化串口1 UART1,UART2,UART3,UART4
+ 141   1      
+ 142   1              COMx_InitStructure.UART_Mode      = UART_8bit_BRTx;             //模式,       UART_ShiftRight,UART_8bit_BRTx,UART_9b
+             -it,UART_9bit_BRTx
+ 143   1              COMx_InitStructure.UART_BaudRate  = 115200ul;                   //波特率,     110 ~ 115200
+ 144   1              COMx_InitStructure.UART_RxEnable  = ENABLE;                             //接收允许,   ENABLE或DISABLE
+ 145   1              COMx_InitStructure.UART_Interrupt = ENABLE;                             //中断允许,   ENABLE或DISABLE
+ 146   1              COMx_InitStructure.UART_Polity    = Polity_0;                   //指定中断优先级(低到高) Polity_0,Polity_1,Polity_2,Polit
+             -y_3
+ 147   1              COMx_InitStructure.UART_P_SW      = UART2_SW_P10_P11;   //切换端口,   UART2_SW_P10_P11,UART2_SW_P46_P47
+ 148   1              UART_Configuration(UART2, &COMx_InitStructure);                 //初始化串口2 UART1,UART2,UART3,UART4
+ 149   1              
+ 150   1              //PrintString1("STC8H8K64U UART1 Test Programme!\r\n"); //UART1发送一个字符串
+ 151   1              //PrintString2("STC8H8K64U UART2 Test Programme!\r\n"); //UART2发送一个字符串
+ 152   1      }
+ 153          
+ 154          
+ 155          /******************** 主函数 **************************/
+ 156          void main(void)
+ 157          {
+ 158   1              delay_ms(100);                  //上电等待系统稳定
+ 159   1              delay_us(50);
+ 160   1              GPIO_config();                  //IO初始化
+ 161   1              I2C_config();                   //IIC初始化
+ 162   1              UART_config();                  //串口初始化
+ 163   1              LCD_Init();                             //LCD1602初始化
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 4   
+
+ 164   1              SHT30_Init();                   //SHT30初始化
+ 165   1              wifi_protocol_init();   //协议串口初始化函数 mcu_api.c
+ 166   1              EA = 1;                                 //开总中断
+ 167   1                      
+ 168   1              //Beep = 1;delay_ms(250);Beep = 0;      //上电蜂鸣器提示
+ 169   1              LED_R = 1;                                                      //上电打开电源指示灯
+ 170   1              
+ 171   1              LCD1602_GotoXY(0, 0);                   //显示字符串
+ 172   1              LCD1602_Display_NoXY(table1);
+ 173   1              LCD1602_GotoXY(1, 0);                   //显示字符串
+ 174   1              LCD1602_Display_NoXY(table2);
+ 175   1              delay_s(2);                                             //显示2秒
+ 176   1              LCD1602_ClearDisplay();                 //LCD清屏
+ 177   1      
+ 178   1              while(1)
+ 179   1              {       
+ 180   2                      wifi_uart_service();            //wifi串口数据处理服务 mcu_api.c
+ 181   2                      
+ 182   2                      switch(mcu_get_wifi_work_state())
+ 183   2                      {
+ 184   3                              case SMART_CONFIG_STATE:
+ 185   3                      LED_B =! LED_B;delay_ms(1);
+ 186   3                                      //处于 Smart 配置状态，即 LED 快闪
+ 187   3                  break;
+ 188   3                  case AP_STATE:
+ 189   3                                      LED_B =! LED_B;delay_ms(50);
+ 190   3                      //处于 AP 配置状态，即 LED 慢闪
+ 191   3                  break;
+ 192   3                  case WIFI_NOT_CONNECTED:
+ 193   3                      LED_B = 0;
+ 194   3                                      //Wi-Fi 配置完成，正在连接路由器，即 LED 常暗
+ 195   3                  break;
+ 196   3                  case WIFI_CONNECTED:
+ 197   3                      LED_B = 1;delay_ms(50);LED_B = 0;delay_ms(5);LED_B = 1;
+ 198   3                                      //路由器连接成功，即 LED 心跳闪
+ 199   3                  break;
+ 200   3                              case WIFI_CONN_CLOUD:
+ 201   3                                      LED_B = 1;
+ 202   3                                      //WIFI已经连接上云服务器，即 LED 常亮
+ 203   3                              break;
+ 204   3                  default:break;
+ 205   3                      }
+ 206   2                      
+ 207   2                      SHT30_Data_Process();           //读取sht30数据并处理得到温湿度值
+ 208   2                      all_data_update();                      //所有数据上报云端
+ 209   2                      
+ 210   2      //              TX1_write2buff(SHT30_Temperature);              //串口打印温度
+ 211   2      //              TX1_write2buff(SHT30_Humidity);                 //串口打印湿度
+ 212   2                      
+ 213   2                      Handle_Char_Temp(SHT30_Temperature);    //温度数据转换并实时显示
+ 214   2                      Handle_Char_Hum(SHT30_Humidity);                //湿度数据转换并实时显示
+ 215   2                      
+ 216   2                      LCD_Display();          //开关状态显示
+ 217   2                      Key_Handle();           //按键处理函数
+ 218   2                      Set_Handle();           //温度设置处理函数
+ 219   2              }
+ 220   1      }
+ 221          
+ 222          
+ 223          //========================================================================
+ 224          // 函数: void Handle_Char_Temp(u16 dat)
+ 225          // 描述: 温度数据转换字符串函数。
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 5   
+
+ 226          // 参数: 无.
+ 227          // 返回: none.
+ 228          //========================================================================
+ 229          void Handle_Char_Temp(u16 dat)
+ 230          {
+ 231   1              Temperatur[0] = (u8)((dat/100)%10)+0x30;        //温度十位
+ 232   1              Temperatur[1] = (u8)((dat/10)%10)+0x30;         //温度个位
+ 233   1              Temperatur[2] = '.';
+ 234   1              Temperatur[3] = (u8)((dat/1)%10)+0x30;          //温度小数位
+ 235   1              Temperatur[4] = 'C';
+ 236   1              Temperatur[5] = '\0';
+ 237   1              
+ 238   1              LCD1602_GotoXY(0, 0);                                           //实时温度显示
+ 239   1              LCD1602_Display_NoXY(Temperatur);
+ 240   1      }
+ 241          
+ 242          //========================================================================
+ 243          // 函数: void Handle_Char_Hum(u16 dat)
+ 244          // 描述: 湿度数据转换字符串函数。
+ 245          // 参数: 无.
+ 246          // 返回: none.
+ 247          //========================================================================
+ 248          void Handle_Char_Hum(u16 dat)
+ 249          {
+ 250   1              Humidity[0] = (u8)((dat/100)%10)+0x30;          //湿度十位
+ 251   1              Humidity[1] = (u8)((dat/10)%10)+0x30;           //湿度个位
+ 252   1              Humidity[2] = '.';
+ 253   1              Humidity[3] = (u8)((dat/1)%10)+0x30;            //湿度小数位
+ 254   1              Humidity[4] = '%';
+ 255   1              Humidity[5] = '\0';
+ 256   1              
+ 257   1              LCD1602_GotoXY(1, 0);                                           //实时湿度显示
+ 258   1              LCD1602_Display_NoXY(Humidity);
+ 259   1      }
+ 260          
+ 261          //========================================================================
+ 262          // 函数: void Handle_Char_SetTemp(u16 dat)
+ 263          // 描述: int数据转换字符串函数。
+ 264          // 参数: 无.
+ 265          // 返回: none.
+ 266          //========================================================================
+ 267          void Handle_Char_SetTemp(u16 dat)
+ 268          {
+ 269   1              Set_Value[0] = (u8)(dat/100)+0x30;
+ 270   1              Set_Value[1] = (u8)(dat%100/10)+0x30;
+ 271   1              Set_Value[2] = '.';
+ 272   1              Set_Value[3] = (u8)(dat%10)+0x30;
+ 273   1              Set_Value[4] = '\0';
+ 274   1      }
+ 275          
+ 276          //========================================================================
+ 277          // 函数: void LCD_Display()
+ 278          // 描述: LCD1602显示函数。设定温度、继电器状态显示。
+ 279          // 参数: 无.
+ 280          // 返回: none.
+ 281          //========================================================================
+ 282          void LCD_Display()
+ 283          {
+ 284   1              Handle_Char_SetTemp(Set_Temp_Open);
+ 285   1              LCD1602_GotoXY(0, 6);                                   //温度高设定显示
+ 286   1              LCD1602_Display_NoXY(Set_Value);
+ 287   1              Handle_Char_SetTemp(Set_Temp_Close);
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 6   
+
+ 288   1              LCD1602_GotoXY(1, 6);                                   //温度高设定显示
+ 289   1              LCD1602_Display_NoXY(Set_Value);
+ 290   1              
+ 291   1              if(Key_Model==0)                                                //设置选项状态显示
+ 292   1              {
+ 293   2                      LCD1602_GotoXY(0, 10);                          
+ 294   2                      LCD1602_Display_NoXY("*");
+ 295   2                      LCD1602_GotoXY(1, 10);                          
+ 296   2                      LCD1602_Display_NoXY(" ");
+ 297   2              }
+ 298   1              if(Key_Model==1)                                                //设置选项状态显示
+ 299   1              {
+ 300   2                      LCD1602_GotoXY(0, 10);
+ 301   2                      LCD1602_Display_NoXY(" ");
+ 302   2                      LCD1602_GotoXY(1, 10);
+ 303   2                      LCD1602_Display_NoXY("*");
+ 304   2              }
+ 305   1              
+ 306   1              LCD1602_GotoXY(0, 12);                                  //继电器K1状态显示
+ 307   1              LCD1602_Display_NoXY(Table_K1);
+ 308   1              LCD1602_GotoXY(0, 15);
+ 309   1              if(S1==0)
+ 310   1              LCD1602_Display_NoXY(Table_OFF);
+ 311   1              else
+ 312   1              LCD1602_Display_NoXY(Table_ON);
+ 313   1              
+ 314   1              LCD1602_GotoXY(1, 12);                                  //继电器K2状态显示
+ 315   1              LCD1602_Display_NoXY(Table_K2);
+ 316   1              LCD1602_GotoXY(1, 15);
+ 317   1              if(S2==0)
+ 318   1              LCD1602_Display_NoXY(Table_OFF);
+ 319   1              else
+ 320   1              LCD1602_Display_NoXY(Table_ON);
+ 321   1      }
+ 322          
+ 323          //========================================================================
+ 324          // 函数: void Key_Handle()
+ 325          // 描述: 按键处理函数。两个数据切换加减处理。
+ 326          // 参数: 无.
+ 327          // 返回: none.
+ 328          //========================================================================
+ 329          void Key_Handle()
+ 330          {
+ 331   1              if(KEY_1==0)
+ 332   1              {
+ 333   2                      delay_s(1);
+ 334   2                      if(KEY_1==0)
+ 335   2                      {
+ 336   3                              delay_s(1);
+ 337   3                              if(KEY_1==0)
+ 338   3                              {       
+ 339   4                                      mcu_reset_wifi();       //MCU主动重置wifi工作模式
+ 340   4                                      while(KEY_1==0);
+ 341   4                              }
+ 342   3                      }
+ 343   2              }
+ 344   1              
+ 345   1              if(KEY_3==0)
+ 346   1              {
+ 347   2                      delay_ms(5);
+ 348   2                      if(KEY_3==0)
+ 349   2                      Key_Model++;
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 7   
+
+ 350   2                      if(Key_Model==2)
+ 351   2                              Key_Model=0;
+ 352   2              }
+ 353   1              if(Key_Model==0)                //启动温度设定值
+ 354   1              {
+ 355   2                      if(KEY_4==0)
+ 356   2                      {
+ 357   3                              delay_ms(5);
+ 358   3                              if(KEY_4==0)
+ 359   3                              Set_Temp_Open = Set_Temp_Open+10;
+ 360   3                      }
+ 361   2                      
+ 362   2                              if(KEY_2==0)
+ 363   2                      {
+ 364   3                              delay_ms(5);
+ 365   3                              if(KEY_2==0)
+ 366   3                              Set_Temp_Open = Set_Temp_Open-10;
+ 367   3                      }
+ 368   2              }
+ 369   1              if(Key_Model==1)                //停止温度设定值
+ 370   1              {
+ 371   2                      if(KEY_4==0)
+ 372   2                      {
+ 373   3                              delay_ms(5);
+ 374   3                              if(KEY_4==0)
+ 375   3                              Set_Temp_Close = Set_Temp_Close+10;
+ 376   3                      }
+ 377   2                      
+ 378   2                              if(KEY_2==0)
+ 379   2                      {
+ 380   3                              delay_ms(5);
+ 381   3                              if(KEY_2==0)
+ 382   3                              Set_Temp_Close = Set_Temp_Close-10;
+ 383   3                      }
+ 384   2              }
+ 385   1      }
+ 386          
+ 387          //========================================================================
+ 388          // 函数: void Set_Handle()
+ 389          // 描述: 设置温度处理函数。处理降温、加热两种模式
+ 390          // 参数: 无.
+ 391          // 返回: none.
+ 392          //========================================================================
+ 393          void Set_Handle()
+ 394          {
+ 395   1              if(Set_Temp_Open == Set_Temp_Close)             //设置温度开启=设置温度关闭，两种模式关闭
+ 396   1              {
+ 397   2                      S1 = 0;
+ 398   2                      Set_Handle_Flag=0;
+ 399   2              }
+ 400   1              if(Set_Temp_Open > Set_Temp_Close)              //设置温度开启>设置温度关闭，降温模式
+ 401   1              {
+ 402   2                      if((SHT30_Temperature >= Set_Temp_Open) && (Set_Handle_Flag == 0))
+ 403   2                      {
+ 404   3                              S1 = 1;
+ 405   3                              Set_Handle_Flag=1;
+ 406   3                      }
+ 407   2                      if((SHT30_Temperature <= Set_Temp_Close) && (Set_Handle_Flag == 1))
+ 408   2                      {
+ 409   3                              S1 = 0;
+ 410   3                              Set_Handle_Flag=0;
+ 411   3                      }
+C51 COMPILER V9.60.0.0   MAIN                                                              03/04/2021 15:40:17 PAGE 8   
+
+ 412   2              }
+ 413   1              if(Set_Temp_Open < Set_Temp_Close)              //设置温度开启<设置温度关闭，加热模式
+ 414   1              {
+ 415   2                      if((SHT30_Temperature < Set_Temp_Open) && (Set_Handle_Flag == 0))
+ 416   2                      {
+ 417   3                              S1 = 1;
+ 418   3                              Set_Handle_Flag=1;
+ 419   3                      }
+ 420   2                      if((SHT30_Temperature > Set_Temp_Close) && (Set_Handle_Flag == 1))
+ 421   2                      {
+ 422   3                              S1 = 0;
+ 423   3                              Set_Handle_Flag=0;
+ 424   3                      }
+ 425   2              }
+ 426   1      }
+ 427          
+ 428          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1240    ----
+   CONSTANT SIZE    =      4    ----
+   XDATA SIZE       =     70      26
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

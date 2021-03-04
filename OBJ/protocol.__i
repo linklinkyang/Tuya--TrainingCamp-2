@@ -1,0 +1,1 @@
+"..\HARDWARE\protocol.c" LARGE OPTIMIZE (8,SPEED) BROWSE INCDIR(..\SYSTEM;..\HARDWARE) DEBUG OBJECTEXTEND PRINT(.\Listings\protocol.lst) OBJECT(..\OBJ\protocol.obj)

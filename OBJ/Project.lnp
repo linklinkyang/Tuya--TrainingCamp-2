@@ -1,0 +1,12 @@
+"..\OBJ\main.obj",
+"..\OBJ\delay.obj",
+"..\OBJ\GPIO.obj",
+"..\OBJ\I2C.obj",
+"..\OBJ\UART.obj",
+"..\OBJ\LCD1602.obj",
+"..\OBJ\SHT30.obj",
+"..\OBJ\protocol.obj",
+"..\OBJ\mcu_api.obj",
+"..\OBJ\system.obj" 
+TO "..\OBJ\Project" 
+PRINT(".\Listings\Project.m51") RAMSIZE(256) 

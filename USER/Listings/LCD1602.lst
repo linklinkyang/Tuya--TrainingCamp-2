@@ -1,0 +1,173 @@
+C51 COMPILER V9.60.0.0   LCD1602                                                           03/04/2021 14:36:13 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE LCD1602
+OBJECT MODULE PLACED IN ..\OBJ\LCD1602.obj
+COMPILER INVOKED BY: F:\Program Files (x86)\MDK\C51\BIN\C51.EXE ..\HARDWARE\LCD1602.c LARGE OPTIMIZE(8,SPEED) BROWSE INC
+                    -DIR(..\SYSTEM;..\HARDWARE) DEBUG OBJECTEXTEND PRINT(.\Listings\LCD1602.lst) OBJECT(..\OBJ\LCD1602.obj)
+
+line level    source
+
+   1          
+   2          #include "LCD1602.h"
+   3          
+   4          //#define       LCD_I2C_ADDRESS         0x27 << 1       //I2C地址，需要左移一位
+   5          #define LCD_I2C_ADDRESS         0x20 << 1       //I2C地址，需要左移一位
+   6          #define BACKLIGHT                       0x08            //PCF8574 P3口，背光开关
+   7          #define En                                      0x04            //使能位，PCF8574 P2口
+   8          #define Rw                                      0x02            //读/写位，PCF8574 P1口
+   9          #define Rs                                      0x01            //选择位，PCF8574 P0口
+  10          
+  11          #define setbit(x,y)  x |= (1 << y)              //指定的某一位数置1
+  12          #define clrbit(x,y)  x &= ~(1 << y)             //指定的某一位数置0
+  13          #define reversebit(x,y)  x ^= (1 << y)  //指定的某一位数取反
+  14          
+  15          
+  16          //========================================================================
+  17          // 函数: void LCD_En(unsigned char value)
+  18          // 描述: LCD使能
+  19          // 参数: 无.
+  20          // 返回: none.
+  21          //========================================================================
+  22          void LCD_En(unsigned char value)
+  23          {
+  24   1              Writebyte(LCD_I2C_ADDRESS, value | En); //EN = 1
+  25   1              delay_ms(1);
+  26   1              clrbit(value, 2);
+  27   1              Writebyte(LCD_I2C_ADDRESS, value);      //EN = 0
+  28   1              delay_ms(1);
+  29   1      }
+  30          
+  31          //========================================================================
+  32          // 函数: void LCD_Write(unsigned char mode, unsigned char cmd)
+  33          // 描述: LCD写命令/数据函数。mode=0命令，mode=1数据
+  34          // 参数: 无.
+  35          // 返回: none.
+  36          //========================================================================
+  37          void LCD_Write(unsigned char mode, unsigned char cmd)
+  38          {
+  39   1              unsigned char high, low;
+  40   1              unsigned char temp;
+  41   1              high = cmd & 0xF0 | BACKLIGHT;                  //高四位
+  42   1              low = (cmd << 4) & 0xF0 | BACKLIGHT;    //低四位变高四位
+  43   1      
+  44   1              temp = Readbyte(LCD_I2C_ADDRESS);               //获取引脚电平
+  45   1              temp = temp & 0xF0;             //保留高四位电平
+  46   1      
+  47   1              Writebyte(LCD_I2C_ADDRESS, temp | BACKLIGHT);//en = 0，写引脚时保持高四位电平不变
+  48   1              delay_ms(1);
+  49   1      
+  50   1              if(mode == 0) {
+  51   2                      Writebyte(LCD_I2C_ADDRESS, temp | BACKLIGHT);//rs = 0，写引脚时保持高四位电平不变
+  52   2              } else {
+  53   2                      Writebyte(LCD_I2C_ADDRESS, temp | Rs | BACKLIGHT);//rs = 1，写引脚时保持高四位电平不变
+  54   2              }
+C51 COMPILER V9.60.0.0   LCD1602                                                           03/04/2021 14:36:13 PAGE 2   
+
+  55   1      
+  56   1              temp = Readbyte(LCD_I2C_ADDRESS);               //获取引脚电平
+  57   1              temp = temp & 0x0F;             //保留低四位电平
+  58   1              
+  59   1              Writebyte(LCD_I2C_ADDRESS, high | temp);//写高四位数据时保持低四位引脚电平不变
+  60   1              delay_ms(1);
+  61   1              LCD_En(high | temp);
+  62   1      
+  63   1              Writebyte(LCD_I2C_ADDRESS, low | temp);//写高四位数据时保持低四位引脚电平不变
+  64   1              delay_ms(1);
+  65   1              LCD_En(low | temp);
+  66   1      
+  67   1      }
+  68          
+  69          //========================================================================
+  70          // 函数: void LCD1602_ClearDisplay()
+  71          // 描述: LCD清屏
+  72          // 参数: 无.
+  73          // 返回: none.
+  74          //========================================================================
+  75          void LCD1602_ClearDisplay()
+  76          {
+  77   1              LCD_Write(0,0x01);
+  78   1      }
+  79          
+  80          
+  81          //========================================================================
+  82          // 函数: void LCD_Init()
+  83          // 描述: LCD初始化
+  84          // 参数: 无.
+  85          // 返回: none.
+  86          //========================================================================
+  87          void LCD_Init()
+  88          {
+  89   1              unsigned char temp;
+  90   1              delay_ms(200);                  //等待供电稳定
+  91   1              LCD_Write(0, 0x30);
+  92   1              delay_ms(5);
+  93   1              LCD_Write(0, 0x30);
+  94   1              delay_ms(5);
+  95   1              LCD_Write(0, 0x30);
+  96   1              delay_ms(1);
+  97   1              LCD_Write(0, 0x20);
+  98   1              delay_ms(1);
+  99   1      
+ 100   1              //用四线时，1602的初始化只需要高四位数据就可以完成，在初始化完成之后必须再传入四位数据，
+ 101   1              //执行完“LCD_Write(0, 0x28);”之后液晶已经初始化，其实在执行了一半的时候就已经初始化完成，
+ 102   1              //此时又传入了四位数据（一个写语句会传入8位数据），这时候如果直接写数据的话，就会形成乱码，所以需要两次功
+             -能性初始化。
+ 103   1              LCD_Write(0, 0x28);   //4位数据端口,2行显示,5*7点阵
+ 104   1              temp = Readbyte(LCD_I2C_ADDRESS);               //获取引脚电平
+ 105   1              LCD_En(temp);
+ 106   1      
+ 107   1              LCD_Write(0, 0x28);   //4位数据端口,2行显示,5*7点阵
+ 108   1              LCD_Write(0, 0x0c);       //开启显示, 无光标
+ 109   1              LCD_Write(0, 0x06);       //AC递增, 画面不动
+ 110   1              LCD_Write(0, 0x01);   //清屏
+ 111   1              delay_ms(50);
+ 112   1      }
+ 113          
+ 114          //========================================================================
+ 115          // 函数: void LCD1602_GotoXY(unsigned char x, unsigned char y)
+C51 COMPILER V9.60.0.0   LCD1602                                                           03/04/2021 14:36:13 PAGE 3   
+
+ 116          // 描述: LCD显示指针位置。X：0-1，Y：0-15
+ 117          // 参数: x、y.
+ 118          // 返回: none.
+ 119          //========================================================================
+ 120          void LCD1602_GotoXY(unsigned char x, unsigned char y)
+ 121          {
+ 122   1              if(x == 0)
+ 123   1                      LCD_Write(0, 0x80 + y);
+ 124   1      
+ 125   1              if(x == 1)
+ 126   1                      LCD_Write(0, (0x80 + 0x40 + y));
+ 127   1      }
+ 128          
+ 129          //========================================================================
+ 130          // 函数: void LCD1602_Display_NoXY(unsigned char *str)
+ 131          // 描述: LCD写入字符串
+ 132          // 参数: *str.
+ 133          // 返回: none.
+ 134          //========================================================================
+ 135          void LCD1602_Display_NoXY(unsigned char *str)
+ 136          {
+ 137   1              while(*str != '\0') {
+ 138   2                      LCD_Write(1, *str);
+ 139   2                      str++;
+ 140   2              }
+ 141   1      }
+ 142          
+ 143          
+ 144          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    395    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      10
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

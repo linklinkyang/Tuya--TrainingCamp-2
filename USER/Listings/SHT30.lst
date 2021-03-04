@@ -1,0 +1,185 @@
+C51 COMPILER V9.60.0.0   SHT30                                                             03/04/2021 14:40:21 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE SHT30
+OBJECT MODULE PLACED IN ..\OBJ\SHT30.obj
+COMPILER INVOKED BY: F:\Program Files (x86)\MDK\C51\BIN\C51.EXE ..\HARDWARE\SHT30.c LARGE OPTIMIZE(8,SPEED) BROWSE INCDI
+                    -R(..\SYSTEM;..\HARDWARE) DEBUG OBJECTEXTEND PRINT(.\Listings\SHT30.lst) OBJECT(..\OBJ\SHT30.obj)
+
+line level    source
+
+   1          #include <sht30.H>
+   2          
+   3          u8 read_sht_data[7];    //数据读取缓存
+   4          
+   5          u16 SHT30_Temperature;
+   6          u16 SHT30_Humidity;
+   7          
+   8          
+   9          //========================================================================
+  10          // 函数: void SHT30_Init(void)
+  11          // 描述: SHT30初始化
+  12          // 参数: 无.
+  13          // 返回: none.
+  14          //========================================================================
+  15          void SHT30_Init(void)
+  16          {       
+  17   1              EAXSFR();               /* MOVX A,@DPTR/MOVX @DPTR,A指令的操作对象为扩展SFR(XSFR) */
+  18   1              Start();              //启动总线
+  19   1              SendData(0x88);       //发送从器件写地址 
+  20   1              RecvACK();            //器件应答检测
+  21   1              SendData(0x20);       //low Repeatability,0.5mps
+  22   1              RecvACK();            //器件应答检测
+  23   1              SendData(0x32);       //low Repeatability,0.5mps
+  24   1              RecvACK();            //器件应答检测
+  25   1              Stop();
+  26   1              EAXRAM();               /* MOVX A,@DPTR/MOVX @DPTR,A指令的操作对象为扩展RAM(XRAM) */
+  27   1              delay_ms(150);              //延时测量数据，为下一步读取做准备
+  28   1      }
+  29          
+  30          //========================================================================
+  31          // 函数: void Read_SHT30(u8 *p,u8 number)
+  32          // 描述: SHT30读数据
+  33          // 参数: 无.
+  34          // 返回: none.
+  35          //========================================================================
+  36          void Read_SHT30(u8 *p,u8 number)
+  37          {
+  38   1              EAXSFR();               /* MOVX A,@DPTR/MOVX @DPTR,A指令的操作对象为扩展SFR(XSFR) */
+  39   1              Start();              //启动总线
+  40   1              SendData(0x88);       //发送从器件写地址 
+  41   1              RecvACK();            //器件应答检测
+  42   1              SendData(0xe0);       //数据获取命令
+  43   1              RecvACK();            //器件应答检测
+  44   1              SendData(0x00);       //数据获取命令
+  45   1              RecvACK();            //器件应答检测
+  46   1              
+  47   1              Start();              //启动总线
+  48   1              SendData(0x89);       //发送从器件读地址 
+  49   1              RecvACK();            //器件应答检测
+  50   1                do
+  51   1                        {
+  52   2                          *p = RecvData();    //开始逐个读出字节
+  53   2                              p++;
+  54   2                              if(number != 1)
+C51 COMPILER V9.60.0.0   SHT30                                                             03/04/2021 14:40:21 PAGE 2   
+
+  55   2                                SendACK();            //应答
+  56   2                        }
+  57   1                        while(--number);              //直至读完数据
+  58   1                        SendNAK();                    //总线非应答
+  59   1              Stop(); 
+  60   1              EAXRAM();               /* MOVX A,@DPTR/MOVX @DPTR,A指令的操作对象为扩展RAM(XRAM) */              
+  61   1      }
+  62          
+  63          //========================================================================
+  64          // 函数: int  CRC8_Compute(u8 *check_data, u8 num_of_data)
+  65          // 描述: CRC数据校验
+  66          // 参数: 无.
+  67          // 返回: none.
+  68          //========================================================================
+  69          int  CRC8_Compute(u8 *check_data, u8 num_of_data)
+  70          {
+  71   1              u8 i;        // bit mask
+  72   1          u8 crc = 0xFF; // calculated checksum
+  73   1          u8 byteCtr;    // byte counter
+  74   1      
+  75   1       // calculates 8-Bit checksum with given polynomial
+  76   1          for(byteCtr = 0; byteCtr < num_of_data; byteCtr++) 
+  77   1              {
+  78   2           crc ^= (check_data[byteCtr]);//异或赋值，crc=crc^(check_data[byteCtr])
+  79   2                      
+  80   2              //crc校验，最高位是1就^0x31
+  81   2           for(i = 8; i > 0; --i) 
+  82   2                      {
+  83   3               if(crc & 0x80) 
+  84   3                              {
+  85   4                   crc = (crc << 1) ^ 0x31;
+  86   4                  }  
+  87   3                       else 
+  88   3                              {
+  89   4                   crc = (crc << 1);
+  90   4                  }
+  91   3              }
+  92   2          }
+  93   1       return crc;
+  94   1      }
+  95          
+  96          //========================================================================
+  97          // 函数: int SHT30_CRC8_Check(u8 *p,u8 num_of_data,u8 CrcData)
+  98          // 描述: CRC数据校验缓冲
+  99          // 参数: 无.
+ 100          // 返回: none.
+ 101          //========================================================================
+ 102          int SHT30_CRC8_Check(u8 *p,u8 num_of_data,u8 CrcData)
+ 103          {
+ 104   1        u8 crc;
+ 105   1        crc = CRC8_Compute(p, num_of_data);// calculates 8-Bit checksum
+ 106   1        if(crc != CrcData) 
+ 107   1         {   
+ 108   2          return 1;           
+ 109   2         }
+ 110   1      return 0;
+ 111   1      }
+ 112          
+ 113          //========================================================================
+ 114          // 函数: void SHT30_Data_Process(void)
+ 115          // 描述: SHT30温湿度数据处理
+ 116          // 参数: 无.
+C51 COMPILER V9.60.0.0   SHT30                                                             03/04/2021 14:40:21 PAGE 3   
+
+ 117          // 返回: none.
+ 118          //========================================================================
+ 119          void SHT30_Data_Process(void)
+ 120          {
+ 121   1              u8 temporary[3];           //用于暂时存放总线读出的温湿度值
+ 122   1          u16  Data_convert;         //用于数据转换
+ 123   1          u8 crc_result;             //用于CRC校验结果存放，为判断数据准确性做准备
+ 124   1              
+ 125   1              Read_SHT30(read_sht_data,6);  //读出数据放入缓存数组等待处理>>T高八位>>T低八位>>温度T的CRC校验位>>H高八位
+             ->>H低八位>>湿度H的CRC校验位
+ 126   1              temporary[0]=read_sht_data[0];//温度数据高八位
+ 127   1          temporary[1]=read_sht_data[1];//温度数据低八位
+ 128   1          temporary[2]=read_sht_data[2];//温度数据CRC校验位
+ 129   1              
+ 130   1          crc_result=SHT30_CRC8_Check(temporary,2,temporary[2]);       //crc校验，crc校验要是不成功就返回1，
+ 131   1                                                                       //同时不会更新温度值
+ 132   1          if(crc_result==0)  
+ 133   1          {
+ 134   2          Data_convert=(u16)(temporary[0] << 8) | temporary[1];  //把2个8位数据拼接为一个16位的数据
+ 135   2          //温度转换，将16位温度数据转化为10进制的温度数据，
+ 136   2              //这里保留了一位小数，SHT30_Temperature这是一个全局变量，
+ 137   2              //计算温度值（u8强制转换，数据在超过八位范围后会丢失）
+ 138   2          SHT30_Temperature = (u16)((175.0 * (float)(0x7fff&Data_convert) / 65535.0 - 45.0) *10.0); 
+ 139   2          }
+ 140   1      
+ 141   1          temporary[0]=read_sht_data[3];//湿度数据高八位
+ 142   1          temporary[1]=read_sht_data[4];//湿度数据低八位
+ 143   1          temporary[2]=read_sht_data[5];//湿度数据CRC校验位
+ 144   1        //crc校验
+ 145   1          crc_result=SHT30_CRC8_Check(temporary,2,temporary[2]);   //crc校验，crc校验要是不成功就返回1，
+ 146   1                                                                       //同时不会更新湿度值
+ 147   1              if(crc_result==0)
+ 148   1          {
+ 149   2          Data_convert = (u16)(temporary[0] << 8) | temporary[1];
+ 150   2          //湿度转换，将16位湿度数据转化为10进制的湿度数据，
+ 151   2              //这里保留了一位小数，SHT30_Humidity这是一个全局变量，
+ 152   2              //计算湿度值（u8强制转换，数据在超过八位范围后会丢失）
+ 153   2          SHT30_Humidity = (u16)((100.0 * (float)(0x7fff&Data_convert) / 65535.0) *10.0); 
+ 154   2          }   
+ 155   1      }
+ 156          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    514    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     11      20
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,1 @@
+"..\HARDWARE\mcu_api.c" LARGE OPTIMIZE (8,SPEED) BROWSE INCDIR(..\SYSTEM;..\HARDWARE) DEBUG OBJECTEXTEND PRINT(.\Listings\mcu_api.lst) OBJECT(..\OBJ\mcu_api.obj)
